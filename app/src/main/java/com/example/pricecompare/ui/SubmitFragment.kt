@@ -27,6 +27,8 @@ import androidx.core.os.CancellationSignal
 import com.example.pricecompare.adapters.formatDistance
 import com.example.pricecompare.logic.GeoUtils
 import com.example.pricecompare.util.LocationHelper
+import com.example.pricecompare.sync.SyncManager
+import com.google.firebase.auth.FirebaseAuth
 
 // Submit tab: validate -> outlier check -> save to SQLite (Firestore upload comes in Phase 5).
 class SubmitFragment : Fragment(R.layout.fragment_submit) {
@@ -110,11 +112,17 @@ class SubmitFragment : Fragment(R.layout.fragment_submit) {
         val outlier = OutlierDetector.isOutlier(newUnit, recent)
 
         // 3. Save locally. Outliers are stored as "unverified" and stay out of baskets.
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
         priceDao.insert(PriceEntry(
             productId = product.id, shopId = shop.id, pricePaisa = paisa, packSize = pack,
+            createdAt = now, userId = uid,
+            // Same text is the Firestore document ID, so a retry can never create a duplicate.
+            remoteId = uid?.let { "${it}_${now}_${product.id}_${shop.id}" },
             status = if (outlier) "unverified" else "verified"
         ))
-        etPrice.text.clear()
+
+        SyncManager.syncNow(requireContext())   // uploads now if online; otherwise stays queuedetPrice.text.clear()
+
         Toast.makeText(
             requireContext(),
             if (outlier) "Saved as UNVERIFIED: far from usual prices. Not used in baskets until confirmed."

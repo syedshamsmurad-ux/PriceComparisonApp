@@ -10,6 +10,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
 import com.example.pricecompare.R
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.example.pricecompare.sync.SyncManager
 
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,5 +46,6 @@ class MainActivity : AppCompatActivity() {
         }
         // Only on first launch; after rotation the FragmentManager restores the screen itself.
         if (savedInstanceState == null) nav.selectedItemId = R.id.nav_browse
+        if (savedInstanceState == null) SyncManager.syncNow(this)   // pull others' prices at launch
     }
 }

@@ -7,21 +7,45 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.fragment.app.Fragment
 import com.example.pricecompare.R
+import com.example.pricecompare.db.PriceDao
+import com.example.pricecompare.sync.SyncManager
 import com.google.firebase.auth.FirebaseAuth
 
-// Profile tab: who is signed in + log out.
+// Profile tab: who is signed in, manual sync, log out.
 class ProfileFragment : Fragment(R.layout.fragment_profile) {
+
+    private lateinit var status: TextView
+    private lateinit var btnSync: Button
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val auth = FirebaseAuth.getInstance()
         view.findViewById<TextView>(R.id.tv_email).text = auth.currentUser?.email ?: "Not signed in"
+        status = view.findViewById(R.id.tv_sync_status)
+        btnSync = view.findViewById(R.id.btn_sync)
+
+        btnSync.setOnClickListener {
+            btnSync.isEnabled = false
+            status.text = "Syncing…"
+            SyncManager.syncNow(requireContext()) { r ->
+                // Runs on the UI thread, but the screen may have closed meanwhile.
+                if (!isAdded || this.view == null) return@syncNow
+                btnSync.isEnabled = true
+                status.text = r.message + "\n" + pendingText()
+            }
+        }
         view.findViewById<Button>(R.id.btn_logout).setOnClickListener {
             auth.signOut()
-            // New task + clear task: nothing from the logged-in session stays on the back stack.
             startActivity(
                 Intent(requireContext(), LoginActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             )
         }
+        status.text = pendingText()
+    }
+
+    private fun pendingText(): String {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return ""
+        return "Waiting to upload: ${PriceDao(requireContext()).pendingCount(uid)}"
     }
 }
