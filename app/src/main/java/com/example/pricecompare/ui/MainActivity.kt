@@ -1,6 +1,8 @@
 package com.example.pricecompare.ui
 
 import android.os.Bundle
+import android.content.Intent
+import com.google.firebase.auth.FirebaseAuth
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -12,6 +14,12 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Auth gate: no signed-in user -> go to login and stop building this screen.
+        if (FirebaseAuth.getInstance().currentUser == null) {
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
 
@@ -28,7 +36,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_browse -> BrowseFragment()
                 R.id.nav_list -> ListFragment()
                 R.id.nav_submit -> SubmitFragment()
-                else -> PlaceholderFragment.newInstance("Profile: Phase 5")
+                else -> ProfileFragment()
             }
             supportFragmentManager.beginTransaction()
                 .replace(R.id.fragment_container, fragment)
