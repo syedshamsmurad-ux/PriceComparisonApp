@@ -3,6 +3,7 @@ package com.example.pricecompare.sync
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import com.example.pricecompare.db.PriceDao
 import com.example.pricecompare.logic.PriceSelector
 import com.example.pricecompare.util.NetworkUtil
@@ -15,14 +16,22 @@ import java.util.concurrent.atomic.AtomicBoolean
 // Upload the queue, then download new community prices. Runs on a worker thread.
 object SyncManager {
     private const val DAY_MS = 24L * 60 * 60 * 1000
+    private const val MIN_GAP_MS = 30_000L           // throttle for automatic triggers
     private val running = AtomicBoolean(false)       // only one sync at a time
+    @Volatile private var lastFinished = 0L
 
     data class Result(val uploaded: Int, val downloaded: Int, val message: String)
 
+    // force = true for the Sync button and Submit; automatic triggers are throttled.
     // onDone (optional) is called on the UI thread, so it may touch Views.
-    fun syncNow(ctx: Context, onDone: ((Result) -> Unit)? = null) {
+    fun syncNow(ctx: Context, force: Boolean = false, onDone: ((Result) -> Unit)? = null) {
         val app = ctx.applicationContext             // never keep an Activity alive in a thread
         val main = Handler(Looper.getMainLooper())
+        if (!force && System.currentTimeMillis() - lastFinished < MIN_GAP_MS) {
+            Log.d("SYNC", "throttled: synced less than 30 s ago")
+            onDone?.let { main.post { it(Result(0, 0, "Synced moments ago")) } }
+            return
+        }
         if (!running.compareAndSet(false, true)) {
             onDone?.let { main.post { it(Result(0, 0, "A sync is already running")) } }
             return
@@ -35,6 +44,7 @@ object SyncManager {
             } finally {
                 running.set(false)
             }
+            Log.d("SYNC", "finished: ${result.message}")
             onDone?.let { main.post { it(result) } }
         }.start()
     }
@@ -67,6 +77,7 @@ object SyncManager {
             if (!dao.hasRemote(e.remoteId!!) && dao.insert(e) != -1L) downloaded++   // skip duplicates
         }
         prefs.edit().putLong("last_download", started).apply()
+        lastFinished = System.currentTimeMillis()    // only a real sync starts the throttle window
         return Result(uploaded, downloaded, "Uploaded $uploaded, downloaded $downloaded")
     }
 

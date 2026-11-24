@@ -27,7 +27,7 @@ class ProfileFragment : Fragment(R.layout.fragment_profile) {
         btnSync.setOnClickListener {
             btnSync.isEnabled = false
             status.text = "Syncing…"
-            SyncManager.syncNow(requireContext()) { r ->
+            SyncManager.syncNow(requireContext(), force = true) { r ->
                 // Runs on the UI thread, but the screen may have closed meanwhile.
                 if (!isAdded || this.view == null) return@syncNow
                 btnSync.isEnabled = true

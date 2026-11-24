@@ -121,7 +121,7 @@ class SubmitFragment : Fragment(R.layout.fragment_submit) {
             status = if (outlier) "unverified" else "verified"
         ))
 
-        SyncManager.syncNow(requireContext())   // uploads now if online; otherwise stays queuedetPrice.text.clear()
+        SyncManager.syncNow(requireContext(), force = true)   // uploads now if online; otherwise stays queuedetPrice.text.clear()
 
         Toast.makeText(
             requireContext(),

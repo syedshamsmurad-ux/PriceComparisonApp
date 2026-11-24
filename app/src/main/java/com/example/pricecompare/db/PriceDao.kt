@@ -29,14 +29,18 @@ class PriceDao(ctx: Context) {
     )
 
     // UPDATE: add one confirm or dispute, then recompute the status with TrustRules.
-    fun vote(id: Long, confirm: Boolean): Boolean {
+    // UPDATE: add one confirm or dispute, then recompute the status with TrustRules.
+    // Returns false (and changes nothing) for an unknown id, or if voterUid submitted the price.
+    fun vote(id: Long, confirm: Boolean, voterUid: String?): Boolean {
         val db = helper.writableDatabase
-        var status = ""; var confirms = 0; var disputes = 0
-        db.rawQuery("SELECT status, confirms, disputes FROM prices WHERE id = ?",
+        var status = ""; var confirms = 0; var disputes = 0; var owner: String? = null
+        db.rawQuery("SELECT status, confirms, disputes, user_id FROM prices WHERE id = ?",
             arrayOf(id.toString())).use { c ->
             if (!c.moveToFirst()) return false
             status = c.getString(0); confirms = c.getInt(1); disputes = c.getInt(2)
+            owner = c.getString(3)                      // null for seed rows
         }
+        if (voterUid != null && owner == voterUid) return false   // no voting on your own price
         if (confirm) confirms++ else disputes++
         return db.update("prices", ContentValues().apply {
             put("confirms", confirms); put("disputes", disputes)
@@ -98,10 +102,11 @@ class PriceDao(ctx: Context) {
         helper.writableDatabase.delete("prices", "id = ?", arrayOf(id.toString()))
 
     // QUERY: all prices of one product (every status), cheapest UNIT price first.
+    // QUERY: all prices of one product (every status), cheapest UNIT price first.
     fun byProduct(productId: Long): List<PriceEntry> {
         val out = mutableListOf<PriceEntry>()
         helper.readableDatabase.rawQuery(
-            "SELECT id, shop_id, price_paisa, pack_size, created_at, status, confirms, disputes " +
+            "SELECT id, shop_id, price_paisa, pack_size, created_at, status, confirms, disputes, user_id " +
                     "FROM prices WHERE product_id = ? ORDER BY price_paisa * 1.0 / pack_size",
             arrayOf(productId.toString())
         ).use { c ->
@@ -110,7 +115,7 @@ class PriceDao(ctx: Context) {
                     id = c.getLong(0), productId = productId, shopId = c.getLong(1),
                     pricePaisa = c.getLong(2), packSize = c.getInt(3),
                     createdAt = c.getLong(4), status = c.getString(5),
-                    confirms = c.getInt(6), disputes = c.getInt(7)
+                    confirms = c.getInt(6), disputes = c.getInt(7), userId = c.getString(8)
                 ))
             }
         }

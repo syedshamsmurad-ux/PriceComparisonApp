@@ -11,8 +11,22 @@ import androidx.fragment.app.Fragment
 import com.example.pricecompare.R
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.example.pricecompare.sync.SyncManager
+import com.example.pricecompare.sync.ConnectivityWatcher
 
 class MainActivity : AppCompatActivity() {
+
+    private val watcher = ConnectivityWatcher()
+
+    override fun onStart() {
+        super.onStart()
+        watcher.start(this)       // listen for connectivity changes while the app is visible
+    }
+
+    override fun onStop() {
+        watcher.stop(this)
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Auth gate: no signed-in user -> go to login and stop building this screen.

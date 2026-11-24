@@ -18,8 +18,10 @@ import com.example.pricecompare.db.ProductDao
 import com.example.pricecompare.db.ShopDao
 import com.example.pricecompare.logic.PriceSelector
 import com.example.pricecompare.logic.UnitNormalizer
+import com.example.pricecompare.model.PriceEntry
 import com.example.pricecompare.model.Product
 import com.example.pricecompare.util.VoteStore
+import com.google.firebase.auth.FirebaseAuth
 
 // Price comparison for ONE product, plus confirm/dispute buttons on every price.
 class ProductDetailActivity : AppCompatActivity() {
@@ -32,6 +34,7 @@ class ProductDetailActivity : AppCompatActivity() {
     private lateinit var product: Product
     private lateinit var priceDao: PriceDao
     private lateinit var votes: VoteStore
+    private lateinit var uid: String
     private lateinit var adapter: PriceRowAdapter
     private lateinit var empty: TextView
 
@@ -50,7 +53,8 @@ class ProductDetailActivity : AppCompatActivity() {
         if (found == null) { finish(); return }   // bad id: nothing to show
         product = found
         priceDao = PriceDao(this)
-        votes = VoteStore(this)
+        uid = FirebaseAuth.getInstance().currentUser?.uid ?: "anonymous"
+        votes = VoteStore(this, uid)
 
         findViewById<TextView>(R.id.tv_title).text = product.name
         findViewById<TextView>(R.id.tv_pack).text =
@@ -64,15 +68,14 @@ class ProductDetailActivity : AppCompatActivity() {
         load()
     }
 
-    // One vote per price per device; then reload so the new status shows immediately.
+    // One vote per price per USER. PriceDao.vote() also refuses your own submissions.
     private fun onVote(priceId: Long, confirm: Boolean) {
         if (votes.hasVoted(priceId)) return
-        priceDao.vote(priceId, confirm)
-        votes.recordVote(priceId)
+        if (priceDao.vote(priceId, confirm, uid)) votes.recordVote(priceId)
         load()
     }
 
-    private fun unit(e: com.example.pricecompare.model.PriceEntry) =
+    private fun unit(e: PriceEntry) =
         UnitNormalizer.unitPricePaisa(e.pricePaisa, e.packSize, product.unit)
 
     // Query -> build display rows -> hand them to the adapter.
@@ -91,19 +94,21 @@ class ProductDetailActivity : AppCompatActivity() {
 
         val rows = sorted.map { e ->
             val days = ((now - e.createdAt) / DAY_MS).toInt()
+            val mine = e.userId == uid                        // seed rows have no owner (null)
             PriceRow(
                 priceId = e.id,
                 shopName = shopsById[e.shopId]?.name ?: "Shop #${e.shopId}",
                 priceText = UnitNormalizer.formatPkr(e.pricePaisa),
                 unitText = "${UnitNormalizer.formatPkr(Math.round(unit(e)))} / " +
                         UnitNormalizer.unitLabel(product.unit),
-                ageText = when (days) { 0 -> "today"; 1 -> "1 day ago"; else -> "$days days ago" },
+                ageText = when (days) { 0 -> "today"; 1 -> "1 day ago"; else -> "$days days ago" } +
+                        if (mine) " • your price" else "",
                 fresh = PriceSelector.isFresh(e.createdAt, now),
                 cheapest = e === cheapest,
                 verified = e.status == "verified",
                 confirms = e.confirms,
                 disputes = e.disputes,
-                voted = votes.hasVoted(e.id)
+                voted = votes.hasVoted(e.id) || mine          // buttons grey out for own prices
             )
         }
         adapter.submit(rows)
