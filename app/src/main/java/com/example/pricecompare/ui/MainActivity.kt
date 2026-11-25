@@ -13,20 +13,27 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.example.pricecompare.sync.SyncManager
 import com.example.pricecompare.sync.ConnectivityWatcher
 
+// Host Activity holding the 4-tab bottom navigation bar and syncing prices while visible.
+// Launched at app startup and by LoginActivity/SignUpActivity after authentication.
 class MainActivity : AppCompatActivity() {
 
     private val watcher = ConnectivityWatcher()
 
+    // Starts watching network changes whenever the main screen becomes visible.
     override fun onStart() {
         super.onStart()
+        // Do not register connectivity listeners when onCreate() already redirected to LoginActivity.
+        if (FirebaseAuth.getInstance().currentUser == null) return
         watcher.start(this)       // listen for connectivity changes while the app is visible
     }
 
+    // Stops watching network changes before the screen leaves view to prevent leaks.
     override fun onStop() {
         watcher.stop(this)
         super.onStop()
     }
 
+    // Redirects unauthenticated users to LoginActivity, else sets up tabs and initial sync.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Auth gate: no signed-in user -> go to login and stop building this screen.
@@ -46,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val nav = findViewById<BottomNavigationView>(R.id.bottom_nav)
+        // Swap the visible Fragment whenever the user taps a bottom navigation tab.
         nav.setOnItemSelectedListener { item ->
             val fragment: Fragment = when (item.itemId) {
                 R.id.nav_browse -> BrowseFragment()

@@ -17,7 +17,8 @@ import com.example.pricecompare.adapters.ProductAdapter
 import com.example.pricecompare.db.ProductDao
 import android.widget.Button
 
-// Browse tab: search box + category filter + product list.
+// Fragment for the Browse tab: searches products by name/category and opens ProductDetailActivity.
+// Hosted inside MainActivity; also provides a button to open NearbyShopsActivity.
 class BrowseFragment : Fragment(R.layout.fragment_browse) {
 
     private lateinit var dao: ProductDao
@@ -27,7 +28,7 @@ class BrowseFragment : Fragment(R.layout.fragment_browse) {
     private lateinit var empty: TextView
     private var categories: List<String> = emptyList()
 
-    // Runs once the layout exists, so findViewById is safe here.
+    // Initializes ProductDao, wires search and category filters, and loads all products.
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         view.findViewById<Button>(R.id.btn_nearby).setOnClickListener {
@@ -63,7 +64,7 @@ class BrowseFragment : Fragment(R.layout.fragment_browse) {
         refresh()
     }
 
-    // Re-run the SQL search with the current text + category and redraw.
+    // Queries ProductDao with the current search query and category filter, then updates the list.
     private fun refresh() {
         val pos = spinner.selectedItemPosition
         val category = if (pos > 0) categories[pos - 1] else null

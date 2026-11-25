@@ -30,7 +30,8 @@ import com.example.pricecompare.util.LocationHelper
 import com.example.pricecompare.sync.SyncManager
 import com.google.firebase.auth.FirebaseAuth
 
-// Submit tab: validate -> outlier check -> save to SQLite (Firestore upload comes in Phase 5).
+// Fragment for the Submit tab: validates a new price, checks outliers, saves locally, and syncs.
+// Hosted inside MainActivity; auto-selects the nearest shop when location permission is granted.
 class SubmitFragment : Fragment(R.layout.fragment_submit) {
 
     private companion object {
@@ -50,10 +51,12 @@ class SubmitFragment : Fragment(R.layout.fragment_submit) {
 
     private var locSignal: CancellationSignal? = null
 
+    // Handles the runtime location permission dialog result by selecting the nearest shop.
     private val permLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted -> if (granted.values.any { it }) selectNearest() }
 
+    // Populates product and shop spinners, wires Submit, and requests location permission if needed.
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val ctx = requireContext()
@@ -87,10 +90,16 @@ class SubmitFragment : Fragment(R.layout.fragment_submit) {
         else permLauncher.launch(LocationHelper.PERMISSIONS)
     }
 
+    // Validates price and pack size, flags outliers as unverified, saves to SQLite, and syncs.
     private fun submit() {
-        val product = products[spProduct.selectedItemPosition]
-        val shop = shops[spShop.selectedItemPosition]
-
+                
+        // getOrNull returns null instead of crashing when nothing is selected.
+        val product = products.getOrNull(spProduct.selectedItemPosition)
+        val shop = shops.getOrNull(spShop.selectedItemPosition)
+        if (product == null || shop == null) {
+            Toast.makeText(requireContext(), "Pick a product and a shop first", Toast.LENGTH_SHORT).show()
+            return
+        }
         // 1. Validate. Return early with an error shown on the field.
         val paisa = parsePaisa(etPrice.text.toString())
         if (paisa == null || paisa < MIN_PAISA) {
@@ -105,6 +114,7 @@ class SubmitFragment : Fragment(R.layout.fragment_submit) {
 
         // 2. Outlier check against fresh VERIFIED prices, compared per kg / litre / piece.
         val now = System.currentTimeMillis()
+        // Convert past verified fresh prices into unit prices so different pack sizes compare.
         val recent = priceDao.byProduct(product.id)
             .filter { it.status == "verified" && PriceSelector.isFresh(it.createdAt, now) }
             .map { UnitNormalizer.unitPricePaisa(it.pricePaisa, it.packSize, product.unit) }
@@ -121,7 +131,9 @@ class SubmitFragment : Fragment(R.layout.fragment_submit) {
             status = if (outlier) "unverified" else "verified"
         ))
 
-        SyncManager.syncNow(requireContext(), force = true)   // uploads now if online; otherwise stays queuedetPrice.text.clear()
+                // Upload now if online; otherwise the row stays queued.
+        SyncManager.syncNow(requireContext(), force = true)
+        etPrice.text.clear()
 
         Toast.makeText(
             requireContext(),
@@ -131,9 +143,10 @@ class SubmitFragment : Fragment(R.layout.fragment_submit) {
         ).show()
     }
 
-    // Pre-select the nearest shop. Silent if there is no fix or the screen already closed.
+    // Queries GPS/network location once and selects the closest shop in the spinner.
     private fun selectNearest() {
         locSignal = LocationHelper.getLocation(requireContext()) { loc ->
+            // Skip if location failed or the Fragment view was closed while waiting.
             if (loc == null || !isAdded || view == null) return@getLocation
             val nearest = GeoUtils.sortByDistance(shops, loc.latitude, loc.longitude)
                 .firstOrNull() ?: return@getLocation
@@ -146,12 +159,13 @@ class SubmitFragment : Fragment(R.layout.fragment_submit) {
         }
     }
 
+    // Cancels any pending location request when the Fragment view is destroyed.
     override fun onDestroyView() {
         locSignal?.cancel()
         super.onDestroyView()
     }
 
-    // "450.50" -> 45050. BigDecimal avoids floating-point rounding errors.
+    // Parses a decimal PKR string (e.g. "450.50") into integer paisa using BigDecimal, or null.
     private fun parsePaisa(text: String): Long? =
         text.trim().toBigDecimalOrNull()
             ?.takeIf { it.signum() > 0 && it <= MAX_PKR }   // range check before toLong()

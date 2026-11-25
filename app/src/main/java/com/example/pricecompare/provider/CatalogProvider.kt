@@ -10,10 +10,8 @@ import android.database.sqlite.SQLiteQueryBuilder
 import android.net.Uri
 import com.example.pricecompare.db.DatabaseHelper
 
-/**
- * Exposes read-only access to the product catalog and full CRUD access
- * to the shopping list via Android's ContentProvider API.
- */
+// ContentProvider exposing read-only products and full CRUD access to shopping_list.
+// Used by ListFragment through Android's ContentResolver instead of direct DAO calls.
 class CatalogProvider : ContentProvider() {
 
     companion object {
@@ -51,6 +49,7 @@ class CatalogProvider : ContentProvider() {
     // during app startup before any query or write is even requested.
     override fun onCreate(): Boolean = true
 
+    // Returns the Android MIME type string for a matched URI, or null if unknown.
     override fun getType(uri: Uri): String? = when (uriMatcher.match(uri)) {
         CODE_PRODUCTS -> CatalogContract.Products.CONTENT_TYPE
         CODE_PRODUCT_ID -> CatalogContract.Products.CONTENT_ITEM_TYPE
@@ -59,6 +58,7 @@ class CatalogProvider : ContentProvider() {
         else -> null
     }
 
+    // Queries products or joined shopping_list rows and returns a live-notified Cursor.
     override fun query(
         uri: Uri,
         projection: Array<out String>?,
@@ -105,6 +105,8 @@ class CatalogProvider : ContentProvider() {
         return cursor
     }
 
+    // Inserts or replaces a shopping_list item and returns its item URI, or null on failure.
+    // Throws UnsupportedOperationException for products and IllegalArgumentException for bad data.
     override fun insert(uri: Uri, values: ContentValues?): Uri? {
         val ctx = checkNotNull(context) { "Provider context is null" }
         when (uriMatcher.match(uri)) {
@@ -149,6 +151,7 @@ class CatalogProvider : ContentProvider() {
         }
     }
 
+    // Updates the quantity (>= 1) of one shopping_list/# item and returns rows updated.
     override fun update(
         uri: Uri,
         values: ContentValues?,
@@ -190,6 +193,7 @@ class CatalogProvider : ContentProvider() {
         }
     }
 
+    // Deletes all shopping_list rows or one shopping_list/# item and returns rows deleted.
     override fun delete(
         uri: Uri,
         selection: String?,

@@ -6,8 +6,10 @@ import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 
-// Turns Firebase exceptions into short messages a user can act on.
+// Maps technical Firebase Auth exceptions into plain, user-friendly error messages.
+// Used by LoginActivity and SignUpActivity when sign-in or sign-up fails.
 object AuthMessages {
+    // Returns a short readable message describing why the given Firebase exception happened.
     fun friendly(e: Exception?): String = when (e) {
         // Weak-password must come BEFORE InvalidCredentials: it is a subclass of it.
         is FirebaseAuthWeakPasswordException -> "Password is too weak. Use 6 or more characters."

@@ -10,9 +10,11 @@ import com.example.pricecompare.model.Product
 
 // Custom adapter: turns a List<Product> into rows (item_product.xml).
 // onClick is a lambda the fragment supplies, so the adapter knows nothing about navigation.
+// Used by BrowseFragment. RecyclerView reuses row views, so scrolling stays fast.
 class ProductAdapter(private val onClick: (Product) -> Unit) :
     RecyclerView.Adapter<ProductAdapter.VH>() {
 
+    // The products currently shown. Starts empty until submit() is called.
     private var items: List<Product> = emptyList()
 
     // Replace the data and redraw. (notifyDataSetChanged is fine for ~80 rows.)
@@ -27,14 +29,17 @@ class ProductAdapter(private val onClick: (Product) -> Unit) :
         val info: TextView = v.findViewById(R.id.tv_info)
     }
 
+    // Called when RecyclerView needs a new row view: inflate item_product.xml.
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
         VH(LayoutInflater.from(parent.context).inflate(R.layout.item_product, parent, false))
 
     override fun getItemCount(): Int = items.size
 
+    // Called to fill a (possibly reused) row with the product at this position.
     override fun onBindViewHolder(holder: VH, position: Int) {
         val p = items[position]
         holder.name.text = p.name
+        // Second line, e.g. "Grains • Generic • 1 kg"; a missing brand is skipped.
         holder.info.text = listOfNotNull(p.category, p.brand, formatPack(p.packSize, p.unit))
             .joinToString(" • ")
         holder.itemView.setOnClickListener { onClick(p) }
@@ -48,5 +53,6 @@ fun formatPack(size: Int, unit: String): String = when (unit) {
     else -> if (size >= 1000) "${trimZero(size / 1000.0)} L" else "$size ml"
 }
 
+// 5.0 -> "5", 2.5 -> "2.5". Removes a useless ".0" from sizes.
 private fun trimZero(d: Double): String =
     if (d == Math.floor(d)) d.toInt().toString() else d.toString()

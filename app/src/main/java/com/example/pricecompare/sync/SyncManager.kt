@@ -13,7 +13,8 @@ import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 
-// Upload the queue, then download new community prices. Runs on a worker thread.
+// Coordinates background two-way sync: uploads pending prices, then downloads new ones.
+// Used by MainActivity, SubmitFragment, ProfileFragment, and SyncReceiver.
 object SyncManager {
     private const val DAY_MS = 24L * 60 * 60 * 1000
     private const val MIN_GAP_MS = 30_000L           // throttle for automatic triggers
@@ -22,20 +23,24 @@ object SyncManager {
 
     data class Result(val uploaded: Int, val downloaded: Int, val message: String)
 
-    // force = true for the Sync button and Submit; automatic triggers are throttled.
-    // onDone (optional) is called on the UI thread, so it may touch Views.
+    // Starts a background sync if allowed by throttle and concurrency, then posts to onDone.
+    // `force = true` bypasses the 30-second cooldown for manual Sync or Submit actions.
     fun syncNow(ctx: Context, force: Boolean = false, onDone: ((Result) -> Unit)? = null) {
         val app = ctx.applicationContext             // never keep an Activity alive in a thread
+        // Handler tied to the main (UI) thread so callbacks can safely update Views.
         val main = Handler(Looper.getMainLooper())
+        // Skip automatic syncs within 30 seconds of the last successful sync.
         if (!force && System.currentTimeMillis() - lastFinished < MIN_GAP_MS) {
             Log.d("SYNC", "throttled: synced less than 30 s ago")
             onDone?.let { main.post { it(Result(0, 0, "Synced moments ago")) } }
             return
         }
+        // Atomically ensures only one sync thread runs at a time.
         if (!running.compareAndSet(false, true)) {
             onDone?.let { main.post { it(Result(0, 0, "A sync is already running")) } }
             return
         }
+        // Move network and database I/O onto a worker thread off the UI thread.
         Thread {
             val result = try {
                 run(app)
@@ -49,8 +54,11 @@ object SyncManager {
         }.start()
     }
 
+    // Executes upload then download synchronously on the worker thread and returns a Result.
     private fun run(ctx: Context): Result {
+        // Bail out early if the user is not signed in to Firebase Auth.
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return Result(0, 0, "Not signed in")
+        // Bail out when offline so queued rows stay local for the next sync.
         if (!NetworkUtil.isOnline(ctx)) return Result(0, 0, "Offline: your prices are saved and will upload later")
         val dao = PriceDao(ctx)
 
@@ -63,12 +71,14 @@ object SyncManager {
                 uploaded++
             } catch (ex: Exception) {
                 if (isConnectionProblem(ex)) break   // no point trying the rest
-                // anything else (e.g. rules rejected this row): skip it, keep going
+                // Permanent row error (e.g. security rule rejection): stop retrying this row.
+                dao.markFailed(e.id)
             }
         }
 
         // 2. DOWNLOAD. Look back 14 days past the last sync: an offline phone may upload old rows late.
         val prefs = ctx.getSharedPreferences("sync", Context.MODE_PRIVATE)
+        // Re-scan 14 days before last sync to catch delayed uploads from offline phones.
         val since = (prefs.getLong("last_download", 0L) - PriceSelector.FRESH_DAYS * DAY_MS)
             .coerceAtLeast(0L)
         val started = System.currentTimeMillis()
@@ -81,9 +91,11 @@ object SyncManager {
         return Result(uploaded, downloaded, "Uploaded $uploaded, downloaded $downloaded")
     }
 
+    // Returns true if an upload exception is a transient network or Firestore outage.
     private fun isConnectionProblem(ex: Exception): Boolean {
         val cause = (ex as? ExecutionException)?.cause ?: ex
         return ex is TimeoutException ||
+                cause is TimeoutException ||
                 (cause is FirebaseFirestoreException &&
                         cause.code == FirebaseFirestoreException.Code.UNAVAILABLE)
     }

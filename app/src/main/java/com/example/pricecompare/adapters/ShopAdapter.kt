@@ -15,16 +15,21 @@ data class ShopRow(
     val nearest: Boolean, val lat: Double, val lng: Double
 )
 
+// Custom adapter for the nearby shops screen (NearbyShopsActivity).
+// onNavigate is supplied by the Activity, which opens the maps app.
 class ShopAdapter(private val onNavigate: (ShopRow) -> Unit) :
     RecyclerView.Adapter<ShopAdapter.VH>() {
 
+    // The rows currently shown. Starts empty until submit() is called.
     private var rows: List<ShopRow> = emptyList()
 
+    // Replace the data and redraw.
     fun submit(list: List<ShopRow>) {
         rows = list
         notifyDataSetChanged()
     }
 
+    // Holds the row's views so findViewById runs once per row, not on every scroll.
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val name: TextView = v.findViewById(R.id.tv_name)
         val info: TextView = v.findViewById(R.id.tv_info)
@@ -32,11 +37,13 @@ class ShopAdapter(private val onNavigate: (ShopRow) -> Unit) :
         val navigate: Button = v.findViewById(R.id.btn_navigate)
     }
 
+    // Called when RecyclerView needs a new row view: inflate item_shop.xml.
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
         VH(LayoutInflater.from(parent.context).inflate(R.layout.item_shop, parent, false))
 
     override fun getItemCount(): Int = rows.size
 
+    // Fills a (possibly reused) row; the nearest shop gets a star.
     override fun onBindViewHolder(h: VH, position: Int) {
         val r = rows[position]
         h.name.text = (if (r.nearest) "★ " else "") + r.name

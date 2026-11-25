@@ -2,10 +2,8 @@ package com.example.pricecompare.provider
 
 import android.net.Uri
 
-/**
- * Contract defining the public URIs, column names, and MIME types
- * exposed by [CatalogProvider].
- */
+// Contract defining the authority, content URIs, column names, and MIME types.
+// Shared by CatalogProvider and callers such as ListFragment.
 object CatalogContract {
 
     // Authority must match android:authorities in AndroidManifest.xml.

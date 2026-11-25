@@ -17,9 +17,12 @@ import com.example.pricecompare.util.AuthMessages
 import com.example.pricecompare.util.AuthValidator
 import com.google.firebase.auth.FirebaseAuth
 
-// Email/password login. Firebase caches the session, so an existing login skips this screen.
+// Login screen (email and password) using Firebase Authentication.
+// Firebase remembers the session, so a user who is already signed in skips straight to MainActivity.
+// Reached from MainActivity's login check and from the log out button in ProfileFragment.
 class LoginActivity : AppCompatActivity() {
 
+    // Kept as fields so setBusy() can disable the button and show the spinner while we wait.
     private lateinit var btnLogin: Button
     private lateinit var progress: ProgressBar
 
@@ -30,6 +33,7 @@ class LoginActivity : AppCompatActivity() {
 
         enableEdgeToEdge()
         setContentView(R.layout.activity_login)
+        // Keep content clear of the status bar and the gesture bar.
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.login_root)) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left + 48, bars.top + 48, bars.right + 48, bars.bottom + 48)
@@ -41,6 +45,7 @@ class LoginActivity : AppCompatActivity() {
         btnLogin = findViewById(R.id.btn_login)
         progress = findViewById(R.id.progress)
 
+        // On click: check the input on the phone first, then ask Firebase to sign in.
         btnLogin.setOnClickListener {
             val email = etEmail.text.toString().trim()
             val password = etPassword.text.toString()
@@ -60,6 +65,7 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
+    // Shows the spinner and disables the button while waiting for Firebase.
     private fun setBusy(busy: Boolean) {
         btnLogin.isEnabled = !busy      // blocks double taps while waiting
         progress.visibility = if (busy) View.VISIBLE else View.GONE

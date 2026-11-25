@@ -4,10 +4,12 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 
-// Fills an empty database from CSV files in assets/. Runs once, inside onCreate.
+// Loads initial sample shops, products, and prices from assets/*.csv into SQLite.
+// Called once by DatabaseHelper.onCreate() when the database is first created.
 object SeedData {
     private const val DAY_MS = 24L * 60 * 60 * 1000
 
+    // Reads shops.csv, products.csv, and prices.csv in order so foreign keys resolve.
     fun load(ctx: Context, db: SQLiteDatabase) {
         // shops.csv columns: name,type,address,lat,lng
         csv(ctx, "shops.csv").forEach { c ->
@@ -26,6 +28,7 @@ object SeedData {
             })
         }
         // prices.csv columns: product_id,shop_id,price_paisa,pack_size,days_ago
+        // Convert each row's days_ago into a UTC millisecond timestamp relative to right now.
         val now = System.currentTimeMillis()
         csv(ctx, "prices.csv").forEach { c ->
             db.insert("prices", null, ContentValues().apply {
@@ -38,10 +41,37 @@ object SeedData {
         }
     }
 
-    // Reads a CSV from assets: skips the header and blank lines, splits on commas.
+    // Opens an asset CSV file, skips the header and blank lines, and parses each row.
     private fun csv(ctx: Context, file: String): List<List<String>> =
         ctx.assets.open(file).bufferedReader().use { it.readLines() }
             .drop(1)
             .filter { it.isNotBlank() }
-            .map { line -> line.split(",").map { it.trim() } }
+            .map { parseCsvLine(it) }
+
+    // Splits one CSV line on commas while keeping commas inside double quotes intact.
+    private fun parseCsvLine(line: String): List<String> {
+        val fields = mutableListOf<String>()
+        val cur = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < line.length) {
+            val ch = line[i]
+            when {
+                // Escaped quote ("") inside a quoted field writes one literal quote.
+                ch == '"' && inQuotes && i + 1 < line.length && line[i + 1] == '"' -> {
+                    cur.append('"')
+                    i++
+                }
+                ch == '"' -> inQuotes = !inQuotes
+                ch == ',' && !inQuotes -> {
+                    fields.add(cur.toString().trim())
+                    cur.clear()
+                }
+                else -> cur.append(ch)
+            }
+            i++
+        }
+        fields.add(cur.toString().trim())
+        return fields
+    }
 }

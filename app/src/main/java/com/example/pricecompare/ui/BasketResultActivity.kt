@@ -24,7 +24,8 @@ import com.example.pricecompare.logic.BasketCalculator
 import com.example.pricecompare.logic.PriceSelector
 import com.example.pricecompare.logic.UnitNormalizer
 
-// Runs the basket algorithm on a BACKGROUND thread, then shows the result on the UI thread.
+// Computes the cheapest single-shop or split-shop basket off the UI thread and shows results.
+// Launched by ListFragment with mode and max-shop extras; also supports sharing as plain text.
 class BasketResultActivity : AppCompatActivity() {
 
     companion object {
@@ -40,10 +41,12 @@ class BasketResultActivity : AppCompatActivity() {
     // Holds the completed result so the Share button can format it on click.
     private var latestOutcome: Outcome? = null
 
+    // Sets up views, disables Share until ready, and runs basket calculation on a worker thread.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_basket_result)
+        // Pad root view by system bar insets plus 48px so edge-to-edge bars do not overlap.
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.basket_root)) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left + 48, bars.top + 48, bars.right + 48, bars.bottom + 48)
@@ -74,6 +77,7 @@ class BasketResultActivity : AppCompatActivity() {
             val outcome = calculate(mode, k)
             // Back on the UI thread to update the screen. Skip if the user already left.
             runOnUiThread {
+                // Guard against updating destroyed views if the user navigated back early.
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 latestOutcome = outcome
                 progress.visibility = View.GONE
@@ -107,6 +111,7 @@ class BasketResultActivity : AppCompatActivity() {
         append("Prices are community-submitted and may be out of date.")
     }
 
+    // Runs on the worker thread to load DB data and return a display-ready Outcome.
     private fun calculate(mode: String, k: Int): Outcome {
         val products = ProductDao(this).all().associateBy { it.id }
         val shops = ShopDao(this).all().associateBy { it.id }

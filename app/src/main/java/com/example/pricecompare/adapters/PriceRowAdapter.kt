@@ -23,17 +23,21 @@ data class PriceRow(
     val voted: Boolean        // this device already voted -> buttons disabled
 )
 
+// Custom adapter for the price comparison screen (ProductDetailActivity).
 // onVote is supplied by the Activity; the adapter never touches the database.
 class PriceRowAdapter(private val onVote: (priceId: Long, confirm: Boolean) -> Unit) :
     RecyclerView.Adapter<PriceRowAdapter.VH>() {
 
+    // The rows currently shown. Starts empty until submit() is called.
     private var rows: List<PriceRow> = emptyList()
 
+    // Replace the data and redraw.
     fun submit(list: List<PriceRow>) {
         rows = list
         notifyDataSetChanged()
     }
 
+    // Holds the row's views so findViewById runs once per row, not on every scroll.
     class VH(v: View) : RecyclerView.ViewHolder(v) {
         val badge: TextView = v.findViewById(R.id.tv_badge)
         val shop: TextView = v.findViewById(R.id.tv_shop)
@@ -44,16 +48,19 @@ class PriceRowAdapter(private val onVote: (priceId: Long, confirm: Boolean) -> U
         val dispute: Button = v.findViewById(R.id.btn_dispute)
     }
 
+    // Called when RecyclerView needs a new row view: inflate item_price_row.xml.
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
         VH(LayoutInflater.from(parent.context).inflate(R.layout.item_price_row, parent, false))
 
     override fun getItemCount(): Int = rows.size
 
+    // Fills a (possibly reused) row with the price at this position.
     override fun onBindViewHolder(h: VH, position: Int) {
         val r = rows[position]
         h.shop.text = r.shopName
         h.price.text = r.priceText
         h.unit.text = r.unitText
+        // Small grey line, e.g. "3 days ago • outdated • unverified".
         h.meta.text = listOfNotNull(
             r.ageText,
             if (!r.fresh) "outdated" else null,

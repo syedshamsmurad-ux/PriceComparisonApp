@@ -4,6 +4,8 @@ import android.content.Context
 import android.database.Cursor
 import com.example.pricecompare.model.Product
 
+// Data Access Object (DAO) for querying and searching the local products catalog.
+// Used by BrowseFragment, ListFragment, SubmitFragment, and BasketResultActivity.
 class ProductDao(ctx: Context) {
     private val helper = DatabaseHelper.get(ctx)
 
@@ -11,15 +13,15 @@ class ProductDao(ctx: Context) {
         const val COLS = "id, name, category, brand, pack_size, unit"
     }
 
-    // QUERY: every product, A to Z.
+    // Returns all products from SQLite sorted alphabetically by name.
     fun all(): List<Product> =
         run("SELECT $COLS FROM products ORDER BY name", arrayOf())
 
-    // QUERY: one product, or null if the id doesn't exist.
+    // Returns the matching Product for `id`, or null if no row exists.
     fun byId(id: Long): Product? =
         run("SELECT $COLS FROM products WHERE id = ?", arrayOf(id.toString())).firstOrNull()
 
-    // QUERY: distinct category names for the filter chips/spinner.
+    // Returns a sorted list of unique product category names for filter chips or spinners.
     fun categories(): List<String> {
         val out = mutableListOf<String>()
         helper.readableDatabase.rawQuery(
@@ -28,8 +30,9 @@ class ProductDao(ctx: Context) {
         return out
     }
 
-    // QUERY: substring search on the lowercase name, optionally limited to one category.
+    // Returns products whose lowercase name contains `text`, optionally filtered by category.
     fun search(text: String, category: String?): List<Product> {
+        // 1=1 lets optional AND filters append cleanly without tracking the first WHERE.
         val sql = StringBuilder("SELECT $COLS FROM products WHERE 1=1")
         val args = mutableListOf<String>()
         if (text.isNotBlank()) {
@@ -47,15 +50,17 @@ class ProductDao(ctx: Context) {
         return run(sql.toString(), args.toTypedArray())
     }
 
-    // Shared helper: run a query and map every row. `.use {}` closes the cursor.
+    // Executes a parameterized SQL query and maps all cursor rows into Product objects.
     private fun run(sql: String, args: Array<String>): List<Product> {
         val out = mutableListOf<Product>()
+        // .use {} automatically closes the Cursor to avoid memory leaks.
         helper.readableDatabase.rawQuery(sql, args).use { c ->
             while (c.moveToNext()) out.add(read(c))
         }
         return out
     }
 
+    // Maps the current Cursor row into a Product data object by fixed column order.
     private fun read(c: Cursor) = Product(
         id = c.getLong(0), name = c.getString(1), category = c.getString(2),
         brand = c.getString(3), packSize = c.getInt(4), unit = c.getString(5)

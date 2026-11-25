@@ -17,9 +17,12 @@ import com.example.pricecompare.util.AuthMessages
 import com.example.pricecompare.util.AuthValidator
 import com.google.firebase.auth.FirebaseAuth
 
-// Creates the account. Firebase signs the new user in automatically on success.
+// Sign-up screen: creates a Firebase account from an email and a password.
+// Firebase signs the new user in automatically, so success goes straight to MainActivity.
+// Opened from the "Sign up" link on LoginActivity.
 class SignUpActivity : AppCompatActivity() {
 
+    // Kept as fields so setBusy() can disable the button and show the spinner while we wait.
     private lateinit var btnSignUp: Button
     private lateinit var progress: ProgressBar
 
@@ -27,6 +30,7 @@ class SignUpActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_signup)
+        // Keep content clear of the status bar and the gesture bar.
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.signup_root)) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left + 48, bars.top + 48, bars.right + 48, bars.bottom + 48)
@@ -50,10 +54,12 @@ class SignUpActivity : AppCompatActivity() {
             }
 
             setBusy(true)
+            // Ask Firebase to create the account; the callback runs when it answers.
             FirebaseAuth.getInstance().createUserWithEmailAndPassword(email, password)
                 .addOnCompleteListener(this) { task ->
                     setBusy(false)
                     if (task.isSuccessful) {
+                        // Clear the back stack so Back cannot return to the sign-up screen.
                         startActivity(
                             Intent(this, MainActivity::class.java)
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -67,6 +73,7 @@ class SignUpActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.tv_back).setOnClickListener { finish() }
     }
 
+    // Shows the spinner and disables the button while waiting for Firebase.
     private fun setBusy(busy: Boolean) {
         btnSignUp.isEnabled = !busy
         progress.visibility = if (busy) View.VISIBLE else View.GONE

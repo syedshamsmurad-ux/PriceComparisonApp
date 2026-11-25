@@ -23,7 +23,8 @@ import com.example.pricecompare.model.Product
 import com.example.pricecompare.util.VoteStore
 import com.google.firebase.auth.FirebaseAuth
 
-// Price comparison for ONE product, plus confirm/dispute buttons on every price.
+// Displays all fresh, stale, and unverified prices for one product and handles community votes.
+// Launched by BrowseFragment when the user taps a product row.
 class ProductDetailActivity : AppCompatActivity() {
 
     companion object {
@@ -38,10 +39,12 @@ class ProductDetailActivity : AppCompatActivity() {
     private lateinit var adapter: PriceRowAdapter
     private lateinit var empty: TextView
 
+    // Loads the requested product by ID, binds the price list adapter, and populates rows.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContentView(R.layout.activity_product_detail)
+        // Pad root view by system bar insets plus 48px for edge-to-edge clearance.
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.detail_root)) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(bars.left + 48, bars.top + 48, bars.right + 48, bars.bottom + 48)
@@ -68,20 +71,22 @@ class ProductDetailActivity : AppCompatActivity() {
         load()
     }
 
-    // One vote per price per USER. PriceDao.vote() also refuses your own submissions.
+    // Records one confirm or dispute vote per user/price in SQLite and VoteStore, then reloads.
     private fun onVote(priceId: Long, confirm: Boolean) {
         if (votes.hasVoted(priceId)) return
         if (priceDao.vote(priceId, confirm, uid)) votes.recordVote(priceId)
         load()
     }
 
+    // Converts a PriceEntry into paisa per standard unit (kg, litre, or piece).
     private fun unit(e: PriceEntry) =
         UnitNormalizer.unitPricePaisa(e.pricePaisa, e.packSize, product.unit)
 
-    // Query -> build display rows -> hand them to the adapter.
+    // Queries prices for this product, filters out rejected rows, marks cheapest, and updates UI.
     private fun load() {
         val shopsById = ShopDao(this).all().associateBy { it.id }
         val all = priceDao.byProduct(product.id)              // every status
+        // Keep only the newest verified price per shop, plus unverified outliers awaiting votes.
         val verified = PriceSelector.latestValid(all).values  // latest verified per shop
         val unverified = all.filter { it.status == "unverified" }  // rejected ones are dropped
         val sorted = (verified + unverified).sortedBy { unit(it) }
@@ -92,6 +97,7 @@ class ProductDetailActivity : AppCompatActivity() {
             it.status == "verified" && PriceSelector.isFresh(it.createdAt, now)
         }
 
+        // Build UI rows with age text and disable voting on own or already-voted entries.
         val rows = sorted.map { e ->
             val days = ((now - e.createdAt) / DAY_MS).toInt()
             val mine = e.userId == uid                        // seed rows have no owner (null)

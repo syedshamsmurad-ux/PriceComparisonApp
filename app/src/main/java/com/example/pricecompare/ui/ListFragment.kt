@@ -25,7 +25,8 @@ import com.example.pricecompare.adapters.formatPack
 import com.example.pricecompare.db.ProductDao
 import com.example.pricecompare.provider.CatalogContract
 
-// List tab: build the shopping list through ContentResolver, pick a mode, open the basket screen.
+// Fragment for the Shopping List tab: manages items via CatalogProvider and picks basket mode.
+// Hosted inside MainActivity; opens BasketResultActivity when the user taps Calculate.
 class ListFragment : Fragment(R.layout.fragment_list) {
 
     private lateinit var productDao: ProductDao
@@ -37,6 +38,7 @@ class ListFragment : Fragment(R.layout.fragment_list) {
     // Tracks the number of rows loaded at the last refresh so Calculate works without a DAO call.
     private var itemCount: Int = 0
 
+    // Binds views, sets up the RecyclerView and shop-count spinner, then loads the saved list.
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         val ctx = requireContext()
@@ -67,9 +69,14 @@ class ListFragment : Fragment(R.layout.fragment_list) {
         refresh()
     }
 
-    // Dialog with a product spinner and a pack count. Quantity is stored in base units.
+    // Shows an AlertDialog to pick a product and pack count, then inserts via ContentResolver.
     private fun showAddDialog() {
         val products = productDao.all()
+        if (products.isEmpty()) {
+            Toast.makeText(requireContext(), "No products available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val v = layoutInflater.inflate(R.layout.dialog_add_to_list, null)
         val sp = v.findViewById<Spinner>(R.id.sp_item)
         val hint = v.findViewById<TextView>(R.id.tv_hint)
@@ -92,16 +99,22 @@ class ListFragment : Fragment(R.layout.fragment_list) {
             .setNegativeButton("Cancel", null)
             .create()
         dialog.show()
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            
+            // Override PositiveButton after show() so invalid pack counts keep the dialog open.
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
             val packs = et.text.toString().toIntOrNull()
             if (packs == null || packs !in 1..99) { et.error = "Enter 1 to 99"; return@setOnClickListener }
-            val product = products[sp.selectedItemPosition]
-            // Insert through ContentResolver; CONFLICT_REPLACE in CatalogProvider updates existing items.
+            val product = products.getOrNull(sp.selectedItemPosition) ?: return@setOnClickListener
             val values = ContentValues().apply {
-                put(CatalogContract.ShoppingList.COL_PRODUCT_ID, product.id)
-                put(CatalogContract.ShoppingList.COL_QUANTITY, packs * product.packSize)
+                put("product_id", product.id)
+                put("quantity", packs * product.packSize)
             }
-            requireContext().contentResolver.insert(CatalogContract.SHOPPING_LIST_URI, values)
+            // insert() returns null if the provider could not save the row.
+            val saved = requireContext().contentResolver.insert(CatalogContract.SHOPPING_LIST_URI, values)
+            if (saved == null) {
+                Toast.makeText(requireContext(), "Could not add the item", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             refresh()
             dialog.dismiss()
         }
@@ -144,7 +157,7 @@ class ListFragment : Fragment(R.layout.fragment_list) {
         empty.visibility = if (rows.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    // Mode and k travel to the next screen as Intent extras.
+    // Validates that at least one item exists, then launches BasketResultActivity with mode and k.
     private fun calculate() {
         if (itemCount == 0) {
             Toast.makeText(requireContext(), "Add at least one product first", Toast.LENGTH_SHORT).show()
