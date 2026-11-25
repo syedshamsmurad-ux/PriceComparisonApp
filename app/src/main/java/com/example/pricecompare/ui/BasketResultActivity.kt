@@ -1,7 +1,9 @@
 package com.example.pricecompare.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
@@ -35,6 +37,9 @@ class BasketResultActivity : AppCompatActivity() {
     // Finished, display-ready result. Built on the worker thread, applied on the UI thread.
     private class Outcome(val summary: String, val rows: List<BasketRow>)
 
+    // Holds the completed result so the Share button can format it on click.
+    private var latestOutcome: Outcome? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -50,6 +55,14 @@ class BasketResultActivity : AppCompatActivity() {
 
         val summary = findViewById<TextView>(R.id.tv_summary)
         val progress = findViewById<ProgressBar>(R.id.progress)
+        val btnShare = findViewById<Button>(R.id.btn_share)
+        // Disabled until background calculation completes with at least one row.
+        btnShare.isEnabled = false
+        btnShare.setOnClickListener {
+            val outcome = latestOutcome ?: return@setOnClickListener
+            if (outcome.rows.isNotEmpty()) shareBasket(outcome)
+        }
+
         val adapter = BasketAdapter()
         val rv = findViewById<RecyclerView>(R.id.rv_basket)
         rv.layoutManager = LinearLayoutManager(this)
@@ -62,11 +75,36 @@ class BasketResultActivity : AppCompatActivity() {
             // Back on the UI thread to update the screen. Skip if the user already left.
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
+                latestOutcome = outcome
                 progress.visibility = View.GONE
                 summary.text = outcome.summary
                 adapter.submit(outcome.rows)
+                // Keep Share disabled if there are no result rows to share.
+                btnShare.isEnabled = outcome.rows.isNotEmpty()
             }
         }.start()
+    }
+
+    // Builds the plain-text summary and launches the Android share chooser.
+    private fun shareBasket(outcome: Outcome) {
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "My cheapest basket")
+            putExtra(Intent.EXTRA_TEXT, buildShareText(outcome))
+        }
+        startActivity(Intent.createChooser(sendIntent, "Share basket as text"))
+    }
+
+    // Formats the basket result into a readable plain-text report.
+    private fun buildShareText(outcome: Outcome): String = buildString {
+        appendLine("PriceCompare basket")
+        appendLine(outcome.summary)
+        for (row in outcome.rows) {
+            appendLine()
+            appendLine("${row.title}: ${row.totalText}")
+            appendLine(row.detail)
+        }
+        append("Prices are community-submitted and may be out of date.")
     }
 
     private fun calculate(mode: String, k: Int): Outcome {

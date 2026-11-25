@@ -36,6 +36,10 @@
             android:exported="false" />
         <activity android:name=".ui.SignUpActivity"
             android:exported="false" />
+        <provider
+            android:name=".provider.CatalogProvider"
+            android:authorities="com.example.pricecompare.provider"
+            android:exported="false" />
     </application>
 
 </manifest>
